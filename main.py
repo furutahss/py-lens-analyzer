@@ -115,6 +115,9 @@ def main():
     plt.title('Shutter Speeds')
     plt.savefig(output_path / 'shutter_speed_pie.png')
 
+    csv_file = output_path / 'analysis_results.csv'
+    df.to_csv(csv_file, index=False, encoding='utf-8-sig')
+
     print(f"解析完了！ '{output_path}' フォルダに結果を保存しました。")
 
 if __name__ == "__main__":
