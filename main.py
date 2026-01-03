@@ -4,39 +4,38 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
 import argparse
+import logging
+from concurrent.futures import ProcessPoolExecutor
+
+logging.getLogger('exifread').setLevel(logging.ERROR)
 
 # EXIFデータ取得
 # @param    file_path 対象ファイルパス
 # @returns  {ファイル名, レンズ名, 焦点距離}
 def get_exif_data(file_path):
-    with open(file_path, 'rb') as f:
-        tags = exifread.process_file(f, details=False)
-        lens_tag = tags.get('EXIF LensModel') or tags.get('Image LensModel') or "Unknown Lens"
-        focal_tag = tags.get('EXIF FocalLength')
-        focal_length = 0
-        if focal_tag:
-            try:
-                val = focal_tag.values[0]
-                focal_length = float(val.num) / float(val.den) if hasattr(val, 'num') else float(val)
-            except:
-                focal_length = 0
-        return {"FileName": file_path.name, "Lens": str(lens_tag), "FocalLength": focal_length}
+    try:
+        with open(file_path, 'rb') as f:
+            tags = exifread.process_file(f, details=False)
+            lens_tag = tags.get('EXIF LensModel') or tags.get('Image LensModel') or "Unknown Lens"
+            focal_tag = tags.get('EXIF FocalLength')
+            focal_length = 0
+            if focal_tag:
+                try:
+                    val = focal_tag.values[0]
+                    focal_length = float(val.num) / float(val.den) if hasattr(val, 'num') else float(val)
+                except:
+                    focal_length = 0
+            return {"FileName": file_path.name, "Lens": str(lens_tag), "FocalLength": focal_length}
+    except Exception as e:
+        print(f"Error reading {file_path}: {e}")
+        return None
 
 # メイン処理
 # @returns  none
 def main():
     parser = argparse.ArgumentParser(description="画像フォルダをスキャンしてレンズと焦点距離の統計を表示します")
-    parser.add_argument(
-        "target_dir", 
-        type=str, 
-        help="解析対象のディレクトリパスを指定してください"
-    )
-    parser.add_argument(
-        "--output", "-o", 
-        type=str, 
-        default="outputs", 
-        help="結果の保存先フォルダ（デフォルト: outputs）"
-    )
+    parser.add_argument("target_dir", type=str, help="解析対象のディレクトリパス")
+    parser.add_argument("--output", "-o", type=str, default="outputs", help="結果の保存先フォルダ")    
     
     args = parser.parse_args()
     target_path = Path(args.target_dir)
@@ -58,14 +57,10 @@ def main():
 
     print(f"解析中... {len(image_files)} 枚の画像が見つかりました。")
 
-    data = []
-    for img_path in image_files:
-        try:
-            info = get_exif_data(img_path)
-            data.append(info)
-        except Exception as e:
-            print(f"Error reading {img_path}: {e}")
+    with ProcessPoolExecutor() as executor:
+        results = list(executor.map(get_exif_data, image_files))
 
+    data = [r for r in results if r is not None]
     df = pd.DataFrame(data)
 
     # グラフの作成と保存
